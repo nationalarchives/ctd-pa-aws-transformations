@@ -1,0 +1,10 @@
+# Python dependencies for CTD PA Lambda Discovery
+# Pinned to versions installed in the `ctd_pa_lambda_discovery` venv
+pandas==2.3.3
+numpy==2.3.4
+boto3==1.40.67
+python-dotenv==1.2.1
+pyyaml==6.0.1
+
+# Additional dependencies - uncomment and modify as needed:
+# requests>=2.31.0
