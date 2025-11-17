@@ -50,13 +50,13 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
         date_unconverted = start_date.text
 
         if date_unconverted:
-            try: 
+            try:
                 unconverted_date_pattern = r"(\d{4})-(\d{2})-(\d{2})"
                 converted_date_pattern = r"\1\2\3"
                 date_unconverted = re.sub(unconverted_date_pattern, converted_date_pattern, date_unconverted)
                 start_date.text = date_unconverted
                 #print(date_unconverted)
-                
+
             except ValueError as e:
                 print(f"Error converting date '{date_unconverted}' : {e}")
 
@@ -69,13 +69,13 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
 
 
         if date_unconverted:
-            try: 
+            try:
                 unconverted_date_pattern = r"(\d{4})-(\d{2})-(\d{2})"
                 converted_date_pattern = r"\1\2\3"
                 date_unconverted = re.sub(unconverted_date_pattern, converted_date_pattern, date_unconverted)
                 end_date.text = date_unconverted
                 #print(date_unconverted)
-                
+
             except ValueError as e:
                 print(f"Error converting date '{date_unconverted}' : {e}")
 
@@ -102,7 +102,7 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
         object_number_elem = record.find("object_number")
         if object_number_elem is not None and object_number_elem.text:
             object_number = object_number_elem.text
-            
+
             # Find the CALM RecordID for this record
             calm_id_elem = record.find("Alternative_number/[alternative_number.type='CALM RecordID']")
             if calm_id_elem is not None:
@@ -118,9 +118,9 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
     print(f"length of root records: {len(list(root.iter('record')))}")
     _total_records = len(list(root.iter('record')))
     for i, record in enumerate (root.iter('record')):
-        
+
     ######################## Find_CALM_Record_ID_Element ###########################################################
-        
+
         Find_CALM_Record_ID_Element = record.find("Alternative_number/[alternative_number.type='CALM RecordID']")
         if Find_CALM_Record_ID_Element is not None:
             iaid = Find_CALM_Record_ID_Element.find('alternative_number').text
@@ -128,12 +128,12 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
             iaid = None
 
     ###############################################################################################################
-        
+
         #replicaId -- not used
-        
+
         citableReference = record.find("object_number")
         citableReference = citableReference.text if citableReference is not None else None
-    
+
         #accumulationDates #-- not used
 
     #################################### parentId ####################################################################
@@ -146,23 +146,23 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
         # Use the lookup dictionary for O(1) parentId resolution
         if part_of_reference and part_of_reference in object_number_dict:
             parentId = object_number_dict[part_of_reference]
-            
+
     #####################################################################################################################
-        
+
         accruals = record.find("accruals")
         accruals = accruals.text if accruals is not None else None
-        
+
         #accessConditions = record.find("access_category.notes") #should apply only to level 1-8    # not used in this form anymore anymore
         #accessConditions =  accessConditions.text if accessConditions is not None else None
-        
+
         administrativeBackground = record.find("admin_history")
         administrativeBackground = administrativeBackground.text if administrativeBackground is not None else None
-        
+
         #appraisalInformation = record.find("disposal.notes")                                        # not used used anymore
         #appraisalInformation = appraisalInformation.text if appraisalInformation is not None else None
 
     ############################# arrangement###########################################################################
-            
+
         arrangement_system = record.find("system_of_arrangement") #values of system_of_arrangement and client_filepath need to be aggregted in arrangement JSON field
         arrangement_system = arrangement_system.text if arrangement_system is not None else ''
         client_filepath = record.find("client_filepath")
@@ -170,61 +170,61 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
 
         arrangement = arrangement_system+' '+client_filepath
         arrangement = arrangement.strip()
-        
+
         if arrangement == "":
             arrangement = None
 
     #####################################################################################################################
 
         #batchId ---> not used
-        
-        #refIaid ---> not used 
-        
+
+        #refIaid ---> not used
+
         catalogueId = record.find("catid")
         catalogueId = int(catalogueId.text) if catalogueId is not None else None
 
     ############ catalogueLevel and access condition #############################################################################
-        
+
         catalogueLevel = record.find("record_type/value[@lang='neutral']")
         catalogueLevel = catalogueLevel.text if catalogueLevel is not None else None
         if catalogueLevel is not None:
             catalogueLevel = int(catalogueLevel)
 
-        if catalogueLevel >= 9: 
+        if catalogueLevel >= 9:
             accessConditions =  None
 
-        if catalogueLevel <= 8: 
+        if catalogueLevel <= 8:
             accessConditions =  "Open unless otherwise stated"
 
     #######################################################################################################
-    
+
         coveringFromDate = record.find("Dating/dating.date.start")
         coveringFromDate = coveringFromDate.text if coveringFromDate is not None else None
         if coveringFromDate is not None:
             coveringFromDate = int(coveringFromDate)
-        
+
         coveringToDate = record.find("Dating/dating.date.end")
         coveringToDate = coveringToDate.text if coveringToDate is not None else None
         if coveringToDate is not None:
             coveringToDate = int(coveringToDate)
-        
+
         chargeType = 1
-        
+
         # eDocumentId -- not used
-        
+
         coveringDates = record.find("dating.notes")
         coveringDates = coveringDates.text if coveringDates is not None else None
-        
+
         custodialHistory = record.find("object_history_note")
         custodialHistory = custodialHistory.text if custodialHistory is not None else None
 
     ################### heldBy #######################################################
-        
+
         heldBy_information = record.find("institution.name")
         heldBy_information = heldBy_information.text if heldBy_information is not None else None
 
         heldBy = []
-        
+
         if heldBy_information == "The National Archives, Kew":
             heldBy = [
         {
@@ -250,13 +250,13 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
         "xReferenceName": "British Film Institute (BFI) National Archive"
         }
     ]
-    
+
     ######### ClosureCode ClosureStatus and closure Type ##################################
 
         if catalogueLevel >= 9:
             closureStatus = record.find("access_status/value[@lang='neutral']")
             closureStatus = closureStatus.text if closureStatus is not None else None
-        
+
             if closureStatus == 'OPEN':
                 closureStatus = 'O'
             elif closureStatus == 'CLOSED':
@@ -271,7 +271,7 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
                 closureCode = None
 
             closureType = None
-            
+
             if closureStatus == 'D':
                 closureType = 'U'
             else:
@@ -291,26 +291,26 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
     ################### recordOpeningDate #######################################################
 
         if catalogueLevel >= 9:
-            
-            recordOpeningDate = record.find("closed_until") 
+
+            recordOpeningDate = record.find("closed_until")
             recordOpeningDate = recordOpeningDate.text if recordOpeningDate is not None else None
 
             if record.find("access_status/value[@lang='neutral']").text == 'CLOSED' and heldBy_information == "UK Parliament":
                 recordOpeningDate = None
-                
+
         if catalogueLevel <= 8:
             recordOpeningDate = None
-            
+
     #    if recordOpeningDate is not None:
     #        closed_date_object = datetime.strptime(recordOpeningDate, "%Y-%m-%d")
     #        recordOpeningDate = closed_date_object + timedelta(days =1)
     #        #recordOpeningDate = recordOpeningDate.strftime("%Y-%m-%d")
     #        recordOpeningDate = recordOpeningDate.strftime("%d-%m-%Y")
-        
+
     #    else:
     #        recordOpeningDate = None
     #############################################################################################
-        
+
         # corporateNames -- not used
 
     ################### copiesInformation #######################################################
@@ -336,9 +336,9 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
         }
     ]
     ################### creatorName #######################################################
-        # At levels 9-10 do not supply any values (even if present in the Axiell export) into the creatorName field 
+        # At levels 9-10 do not supply any values (even if present in the Axiell export) into the creatorName field
         #if catalogueLevel >= 9:
-            
+
         #    creatorName = [
         #    {
         #    "xReferenceName": None,
@@ -350,7 +350,7 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
         #    "endDate": 0
         #    }
         #]
-            
+
         if catalogueLevel <= 8:
             production_elements = record.findall("Production")
             creatorName = []
@@ -368,7 +368,7 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
                             "startDate": 0,
                             "endDate": 0
                         })
-        
+
                     if not creatorName:
                         creatorName = [{
                             "xReferenceName": None,
@@ -379,7 +379,7 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
                             "startDate": 0,
                             "endDate": 0
                         }]
-            
+
     ############################ digitised ##########################################################
 
         digitised = record.find("digitised")
@@ -392,9 +392,9 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
     #################################################################################################
 
         #dimensions -- not used
-        
+
     ########################### formerReferenceDep ###################################################
-        
+
         Find_Former_Ref_Department_Element = record.find("Alternative_number/[alternative_number.type='Former reference (Department)']")
         if Find_Former_Ref_Department_Element is not None:
             formerReferenceDep = Find_Former_Ref_Department_Element.find('alternative_number').text
@@ -402,13 +402,13 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
             formerReferenceDep = None
 
     ########################### formerReferencePro #########################################
-    
+
         Find_Former_Archival_Ref_Element = record.find("Alternative_number/[alternative_number.type='Former archival reference']")
         if Find_Former_Archival_Ref_Element is not None:
             formerReferencePro = Find_Former_Archival_Ref_Element.find('alternative_number').text
         else:
             formerReferencePro = None
-        
+
     ################################# immediateSourceOfAcquisition #######################################
 
         immediateSourceOfAcquisition_xReferenceDescription = record.find("acquisition.notes")
@@ -442,7 +442,7 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
         "endDate": 0
         }
     ]
-        
+
     #############################################################################################
 
         language = record.find("Inscription//inscription.language")
@@ -452,7 +452,7 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
         legalStatus = legalStatus.text if legalStatus is not None else None
 
         #links -- not used
-        
+
     ################################# existence_of_originals #######################################
 
         locationOfOriginals_xReferenceDescription = record.find("existence_of_originals")
@@ -482,9 +482,9 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
         # note -- not used
 
     ################################# people - NOT USED #######################################
-        
 
-        
+
+
     #    people  = []
     #    people =  [
     #    {
@@ -527,8 +527,8 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
         physicalDescriptionForm = '; '.join(physicalDescriptionForm) if physicalDescriptionForm else None
 
     ################################# places - NOT USED #############################################################################################
-        
-        
+
+
     #    places  = []
     #    places = [
     #    {
@@ -560,7 +560,7 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
             publicationNote = [
             publicationNote_string
         ]
-            
+
         elif publicationNote_string is None:
             publicationNote = []
             publicationNote = [
@@ -568,8 +568,8 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
         ]
 
     ################################ publicationNote ###########################################################
-            
-            
+
+
         relatedMaterial_description = record.find("related_material.free_text")
         relatedMaterial_description = relatedMaterial_description.text if relatedMaterial_description is not None else None
 
@@ -602,9 +602,9 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
 
     ###################################################################################################################
 
-        
+
         #registryRecords -- not used and not in JSON template
-        
+
         #restrictionsOnUse = record.find("copyright_note")
         #restrictionsOnUse = restrictionsOnUse.text if restrictionsOnUse is not None else None
 
@@ -686,36 +686,36 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
     ]
 
     ###################################################################################################################
-            
+
         title = record.find("Title/title")
         title = title.text if title is not None else None
 
     ################################### unpublishedFindingAids ###########################################################
-            
+
         unpublishedFindingAids_string = record.find("Finding_aids/finding_aids")
         unpublishedFindingAids_string = unpublishedFindingAids_string.text if unpublishedFindingAids_string is not None else None
         unpublishedFindingAids = [unpublishedFindingAids_string]
-            
+
     ########################################## storing XML values in JSON dictionary ###########################################
 
         ##### Temporarly remove closure information for UK Parliament records that are closed (U status)
-        
+
         # if Jenny asks send U closure status for UK Parliament records to Discovery then deactive this IF statement (Discovery can handle U status)
 
         if heldBy_information == "UK Parliament" and closureStatus == 'U':
             mask_closure_status = True
         else:
             mask_closure_status = False
-        
+
         if mask_closure_status:
             record_data = { "record": {
                             #"$schema": "./PA_JSON_Schema.json",  # for schema validation in Visual Studio
-                            "iaid": iaid, 
-                        #"replicaId": None, 
-                        "citableReference": citableReference, 
+                            "iaid": iaid,
+                        #"replicaId": None,
+                        "citableReference": citableReference,
                         "parentId": parentId,
                         #"accumulationDates": None,
-                        "accruals": accruals, 
+                        "accruals": accruals,
                         "accessConditions": accessConditions,
                         "administrativeBackground": administrativeBackground,
                         #"appraisalInformation": appraisalInformation,
@@ -773,12 +773,12 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
         else:
             record_data = { "record": {
                             #"$schema": "./PA_JSON_Schema.json",  # for schema validation in Visual Studio
-                            "iaid": iaid, 
-                        #"replicaId": None, 
-                        "citableReference": citableReference, 
+                            "iaid": iaid,
+                        #"replicaId": None,
+                        "citableReference": citableReference,
                         "parentId": parentId,
                         #"accumulationDates": None,
-                        "accruals": accruals, 
+                        "accruals": accruals,
                         "accessConditions": accessConditions,
                         "administrativeBackground": administrativeBackground,
                         #"appraisalInformation": appraisalInformation,
@@ -831,8 +831,8 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
                         "unpublishedFindingAids": unpublishedFindingAids
                         }
                     }
-            
-    
+
+
         def _clean_none(obj):
             """Recursively remove None values and empty containers.
             - dict: remove keys with None/empty; return None if dict becomes empty
@@ -862,7 +862,7 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
                     new_list.append(ci)
                 return new_list if new_list else None
             return obj
-            
+
         # remove unnecessary fields (with null values only) if requested
         if remove_empty_fields:
             # prune None/empty fields from the record prior to writing JSON
@@ -877,7 +877,7 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
             records[iaid] = cleaned
         else:
             records[iaid] = record_data
-        
+
         # update diagnostics
         _records_processed += 1
         print(f"Processed [{i}/{_total_records}]: {(_records_processed/_total_records)*100:.0f}%", end='\r')
@@ -898,7 +898,7 @@ class NewlineToPTransformer():
         # nothing to fit for newline replacement
         self._fitted = True
         return self
-    
+
     def _transform_string(self, s: str) -> str:
         """Apply the newline -> <p> policy to a single string."""
         if not isinstance(s, str):
@@ -926,7 +926,7 @@ class NewlineToPTransformer():
         if isinstance(obj, str):
             return self._transform_string(obj)
         return obj
-    
+
     @staticmethod
     def _parse_part(part: str):
         m = re.match(r'^([^\[]+)(?:\[(\d+)\])?$', part)
@@ -952,7 +952,7 @@ class NewlineToPTransformer():
                 cur = cur[idx]
         return cur
 
-    
+
     def set_by_path(self, obj: Any, path: str, value: Any) -> bool:
         """Set value at dotted/bracket path. Returns True on success, False otherwise.
         Does not create intermediate dicts/lists — only sets when path exists."""
@@ -1159,12 +1159,12 @@ class NewlineToPTransformer():
                 else:
                     cur = cur.get(part, None) if isinstance(cur, dict) else None
         return False, None, None
-    
+
 
 class YNamingTransformer():
     """Transformer for applying Y naming conventions."""
-    
-    def __init__(self, 
+
+    def __init__(self,
                  target_columns: Optional[List[str]] = None,
                  backup_original: bool = True):
         """Initialize the transformer."""
@@ -1178,7 +1178,7 @@ class YNamingTransformer():
     def transform(self, data, json_id=None, **kwargs):
         # Delegate to transform_json; apply to all if target_columns is None
         return self.transform_json(data, target_columns=self.target_columns, json_id=json_id)
-        
+
     # regex to find embedded candidate tokens: requires at least one slash
     _embedded_token_re = re.compile(r'([A-Z0-9-]+(?:/[A-Z0-9-]+)+/?)')
 
@@ -1213,7 +1213,7 @@ class YNamingTransformer():
             self.logger.warning(f"Error processing embedded references in '{text}': {e}")
             # On any unexpected error, fall back to original text
             return text
-    
+
 
     def _replace_embedded_references(self, text: str) -> str:
         """Find embedded reference-like tokens in `text` and replace each with its Y-named equivalent.
@@ -1378,7 +1378,7 @@ class YNamingTransformer():
     def _apply_y_naming(self, text: str) -> str:
         """
         Apply Y naming conventions to a reference string.
-        
+
         Rules:
         1. Add prefix 'Y' to the reference (before the letter code)
         2. If adding 'Y' makes the letter code exceed 4 characters, drop the last letter to keep it at 4
@@ -1388,19 +1388,19 @@ class YNamingTransformer():
 
         if not isinstance(text, str) or not text.strip():
             return text
-            
+
         ref = text.strip()
         if not ref:
             return text
-            
+
         # Split by slash to get the prefix (letter code)
         parts = ref.split('/')
         if len(parts) == 0:
             return text
-        
+
         prefix = parts[0].strip().upper()
         suffix = '/' + '/'.join(parts[1:]) if len(parts) > 1 else ''
-        
+
         # Apply naming rules
         # Only apply Y-prefixing for prefixes that are purely alphabetic.
         # This avoids incorrectly modifying references whose first token is numeric
