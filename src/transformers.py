@@ -330,52 +330,49 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
         }
     ]
     ################### creatorName #######################################################
-
-        if catalogueLevel >= 9:
+        # At levels 9-10 do not supply any values (even if present in the Axiell export) into the creatorName field 
+        #if catalogueLevel >= 9:
             
-            creatorName = [
-            {
-            "xReferenceName": None,
-            "preTitle": None,
-            "title": None,
-            "firstName": None,
-            "surname": None,
-            "startDate": 0,
-            "endDate": 0
-            }
-        ]
-
-
+        #    creatorName = [
+        #    {
+        #    "xReferenceName": None,
+        #    "preTitle": None,
+        #    "title": None,
+        #    "firstName": None,
+        #    "surname": None,
+        #    "startDate": 0,
+        #    "endDate": 0
+        #    }
+        #]
+            
         if catalogueLevel <= 8:
-
-            creatorName_xReferenceName = record.find("Production//creator")
-            creatorName_xReferenceName = creatorName_xReferenceName.text if creatorName_xReferenceName is not None else None
-
+            production_elements = record.findall("Production")
             creatorName = []
-            if creatorName_xReferenceName is not None:
-                creatorName = [
-            {
-            "xReferenceName": creatorName_xReferenceName,
-            "preTitle": None,
-            "title": None,
-            "firstName": None,
-            "surname": None,
-            "startDate": 0,
-            "endDate": 0
-            }
-        ]
-            else:
-                creatorName = [
-            {
-            "xReferenceName": None,
-            "preTitle": None,
-            "title": None,
-            "firstName": None,
-            "surname": None,
-            "startDate": 0,
-            "endDate": 0
-            }
-        ]
+        #Looping through each production element to find creator sub-elements
+            if production_elements:
+                for production in production_elements:
+                    creator_element = production.find("creator")
+                    if creator_element is not None and creator_element.text:
+                        creatorName.append({
+                            "xReferenceName": creator_element.text,
+                            "preTitle": None,
+                            "title": None,
+                            "firstName": None,
+                            "surname": None,
+                            "startDate": 0,
+                            "endDate": 0
+                        })
+        
+                    if not creatorName:
+                        creatorName = [{
+                            "xReferenceName": None,
+                            "preTitle": None,
+                            "title": None,
+                            "firstName": None,
+                            "surname": None,
+                            "startDate": 0,
+                            "endDate": 0
+                        }]
             
     ############################ digitised ##########################################################
 
