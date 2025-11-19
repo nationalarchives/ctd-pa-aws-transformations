@@ -141,9 +141,9 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
         part_of_reference = record.find("Part_of/part_of_reference")
         part_of_reference = part_of_reference.text if part_of_reference is not None else None
 
-        parentId = "A13530124"  # Default value
+        parentId = "A13530124"  # Fond level value
 
-        # Use the lookup dictionary for O(1) parentId resolution
+        # Use the lookup dictionary for parentId resolution
         if part_of_reference and part_of_reference in object_number_dict:
             parentId = object_number_dict[part_of_reference]
 
@@ -703,7 +703,7 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
         # if Jenny asks send U closure status for UK Parliament records to Discovery then deactive this IF statement (Discovery can handle U status)
 
         if heldBy_information == "UK Parliament" and closureStatus == 'U':
-            mask_closure_status = True
+            mask_closure_status = False
         else:
             mask_closure_status = False
 
