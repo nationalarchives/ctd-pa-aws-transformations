@@ -14,7 +14,7 @@
 - **Example**: `ax-prod`
 - **Description**: AWS CLI profile name for S3 access in local_s3 mode
 
-### `S3_OUTPUT_DIR` 
+### `S3_OUTPUT_DIR`
 - **Default**: `json_outputs`
 - **Description**: S3 folder for output tarballs and manifest
 

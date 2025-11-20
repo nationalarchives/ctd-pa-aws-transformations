@@ -84,7 +84,7 @@ transformation_config = _load_json_file(transformations_str, logger=logger)
 transfer_register_filename = os.getenv("TRANSFER_REGISTER_FILENAME", "uploaded_records_transfer_register.json")
 
 def lambda_handler(event, context):
-    
+
     # 1. Get bucket and key from event
     record = event['Records'][0]
     bucket = record['s3']['bucket']['name']
@@ -242,7 +242,7 @@ def lambda_handler(event, context):
 
         with log_timing("Applying transformations", logger):
             for filename, _file in converted_xml_to_json_files.items():
-                
+
                 # set up transformation config
                 record_level_mapping = transformation_config.get("record_level_mapping", {})
                 if len(transformation_config) == 0 or len(record_level_mapping) == 0:
@@ -262,11 +262,11 @@ def lambda_handler(event, context):
                         with pre_transform_file.open("w", encoding="utf-8") as fh:
                             json.dump(_file, fh, ensure_ascii=False, indent=2)
                         logger.debug("Saved pre-transformed JSON: %s", pre_transform_file)
-                    
+
                     # newline to <p> transformation
                     transformed_json = None
                     task = transformation_config['tasks'].get('newline_to_p', {})
-                    n = NewlineToPTransformer(target_columns=task.get('target_columns'), 
+                    n = NewlineToPTransformer(target_columns=task.get('target_columns'),
                                               **task.get('params', {}))
                     transformed_json = n.transform(_file)
 
@@ -289,7 +289,7 @@ def lambda_handler(event, context):
                     # Save the final transformed JSON
                     # Collect in memory by level (no disk writes except in DEBUG mode)
                     if use_level_subfolders:
-                        level = str(next((v for v in find_key(transformed_json, 
+                        level = str(next((v for v in find_key(transformed_json,
                                                               "catalogueLevel")), None))
                         dir_name = record_level_mapping.get(level, "UNKNOWN")
                         # Collect in memory by level
@@ -330,15 +330,15 @@ def lambda_handler(event, context):
                             ti.size = len(json_bytes)
                             ti.mtime = int(time.time())
                             tar.addfile(ti, fileobj=io.BytesIO(json_bytes))
-                    
+
                     buf.seek(0)
                     tar_bytes = buf.getvalue()
                     file_count = len(files)
-                    logger.info("Created in-memory tarball: %s (%d files, %d bytes)", 
+                    logger.info("Created in-memory tarball: %s (%d files, %d bytes)",
                                 tarball_name, file_count, len(tar_bytes))
-                    
+
                     level_tarballs[level_name] = tar_bytes
-                    
+
                     # Write tar by folder in local mode
                     if run_mode == "local":
                         tarball_path = output_dir / tarball_name
@@ -349,19 +349,19 @@ def lambda_handler(event, context):
                 except Exception:
                     logger.exception("Error creating tarball for level %s", level_name)
                     return {"status": "error", "message": f"Error creating tarball "
-                            f"for level {level_name}"}    
-                    
+                            f"for level {level_name}"}
+
             # Upload to S3 in S3 modes (local_s3 or remote_s3)
             # we need to create a super-tarball containing all level tarballs
             if run_mode in ["local_s3", "remote_s3"]:
                 if not bucket:
                     logger.error("No S3 bucket specified for upload")
                     return {"status": "error", "message": "No S3 bucket specified"}
-                
+
                 super_tarball_name = f"{tree_name}.tar.gz"
-                logger.info("Creating super-tarball: %s with %d level tarballs", 
+                logger.info("Creating super-tarball: %s with %d level tarballs",
                             super_tarball_name, len(level_tarballs))
-                
+
                 # Create super-tarball containing all level tarballs
                 super_buf = io.BytesIO()
                 with tarfile.open(fileobj=super_buf, mode="w:gz") as super_tar:
@@ -371,14 +371,14 @@ def lambda_handler(event, context):
                         ti.size = len(tar_bytes)
                         ti.mtime = int(time.time())
                         super_tar.addfile(ti, fileobj=io.BytesIO(tar_bytes))
-                        logger.info("Added %s to super-tarball (%d bytes)", 
+                        logger.info("Added %s to super-tarball (%d bytes)",
                                     level_tarball_name, len(tar_bytes))
 
                 super_buf.seek(0)
                 super_tar_bytes = super_buf.getvalue()
-                logger.info("Created super-tarball: %s (%d bytes)", 
+                logger.info("Created super-tarball: %s (%d bytes)",
                             super_tarball_name, len(super_tar_bytes))
-                
+
                 # Upload to json_outputs folder in S3
                 tar_key = f"{output_prefix}/{super_tarball_name}"
                 try:
@@ -396,12 +396,12 @@ def lambda_handler(event, context):
                             logger.exception("Error saving transfer register (non-fatal)")
                             
                 except ClientError as e:
-                    logger.exception("Error uploading tarball to S3: %s", 
+                    logger.exception("Error uploading tarball to S3: %s",
                                     e.response.get('Error', {}).get('Code'))
-                    return {"status": "error", 
+                    return {"status": "error",
                             "message": f"Error uploading super-tarball to S3:"
                                 f" {e.response.get('Error', {}).get('Code')}"}
-                
+
 
 
     if len(successfully_transformed_files) > 0:

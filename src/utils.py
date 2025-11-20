@@ -55,11 +55,11 @@ def find_key(obj, target):
 @contextlib.contextmanager
 def log_timing(operation_name: str, logger: Optional[logging.Logger] = None):
     """Context manager to log start time, end time, and duration of an operation.
-    
+
     Usage:
         with log_timing("XML conversion", logger):
             convert_to_json(...)
-    
+
     Parameters
     ----------
     operation_name : str
@@ -69,11 +69,11 @@ def log_timing(operation_name: str, logger: Optional[logging.Logger] = None):
     """
     if logger is None:
         logger = logging.getLogger(__name__)
-    
+
     start = time.perf_counter()
     start_ts = datetime.now().isoformat()
     logger.info("Started %s at %s", operation_name, start_ts)
-    
+
     try:
         yield
     finally:
@@ -287,7 +287,7 @@ def _load_json_file(path: Optional[str], logger) -> dict:
 
 def filter_xml_by_iaid(xml_path: Union[str, Path], target_iaid: str, output_path: Union[str, Path], logger) -> Path:
     """Filter XML to only include the record with specified citableReference.
-    
+
     Parameters
     ----------
     xml_path : path-like
@@ -298,7 +298,7 @@ def filter_xml_by_iaid(xml_path: Union[str, Path], target_iaid: str, output_path
         Path where filtered XML will be saved
     logger : logging.Logger
         Logger instance
-    
+
     Returns
     -------
     Path
@@ -306,12 +306,12 @@ def filter_xml_by_iaid(xml_path: Union[str, Path], target_iaid: str, output_path
     """
     xml_path = Path(xml_path)
     output_path = Path(output_path)
-    
+
     logger.info("Filtering XML for alternative_number: %s", target_iaid)
-    
+
     tree = ET.parse(xml_path)
     root = tree.getroot()
-    
+
     # Find all record elements (not InformationObject - that's the root container)
     found_record = None
     for record in root.findall('.//record'):
@@ -321,7 +321,7 @@ def filter_xml_by_iaid(xml_path: Union[str, Path], target_iaid: str, output_path
             found_record = record
             logger.info("Found record with alternative_number %s", target_iaid)
             break
-        
+
         # Also try without the type filter (in case structure varies)
         if found_record is None:
             for alt_num in record.findall('.//alternative_number'):
@@ -331,21 +331,21 @@ def filter_xml_by_iaid(xml_path: Union[str, Path], target_iaid: str, output_path
                     break
             if found_record is not None:
                 break
-    
+
     if found_record is None:
         logger.warning("Record with alternative_number %s not found in XML file", target_iaid)
         raise ValueError(f"Record with alternative_number {target_iaid} not found in {xml_path}")
-    
+
     # Create new XML with just this record
     new_root = ET.Element(root.tag, attrib=root.attrib)
     new_root.append(found_record)
     new_tree = ET.ElementTree(new_root)
-    
+
     # Save filtered XML
     output_path.parent.mkdir(parents=True, exist_ok=True)
     new_tree.write(output_path, encoding='utf-8', xml_declaration=True)
     logger.info("Saved filtered XML to %s", output_path)
-    
+
     return output_path
     
 ############################
