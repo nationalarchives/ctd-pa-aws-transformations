@@ -1488,12 +1488,7 @@ class YNamingTransformer():
         if not re.match(r'^[A-Za-z]+$', toks[0]):
             return False
         # Prefix must be at least 1 alphabetic character (reject empty like '/1').
-        if len(toks[0]) > 1 or toks[0] == 'S':
-            return True
-        else:
-            return False
-
-        return True
+        return (len(toks[0]) > 1) or (toks[0] == 'S')
 
 
 class ReplicaDataTransformer:
