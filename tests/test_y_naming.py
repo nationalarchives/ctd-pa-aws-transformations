@@ -52,7 +52,7 @@ EMBEDDED_CASES = [
 def test_is_reference_like_matrix():
     t = YNamingTransformer()
     for ref, expected in REFERENCE_TESTS.items():
-        assert t._is_reference_like(ref) == expected, f"_is_reference_like('{ref}') expected {expected}" 
+        assert t._is_reference_like(ref) == expected, f"_is_reference_like('{ref}') expected {expected}"
 
 
 def test_embedded_reference_transforms():
@@ -99,4 +99,3 @@ def test_whitespace_embedded_cases():
     # Embedded transformation behavior
     assert t.apply_if_reference("ABC/1 DEF") == "YABC/1 DEF"
     assert t.apply_if_reference("ABC/1/ DEF") == "ABC/1/ DEF"
-

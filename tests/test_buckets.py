@@ -39,15 +39,15 @@ def setup_s3_client():
 
 def test_bucket_communication(bucket_name):  # pragma: no cover
     """Test various operations with the S3 bucket"""
-    
+
     try:
         # Test 1: Check if bucket exists and is accessible
         print(f"Testing bucket: {bucket_name}")
-        
+
         # Test 2: Get bucket location
         location = s3.get_bucket_location(Bucket=bucket_name)
         print(f"✅ Bucket location: {location.get('LocationConstraint', 'eu-west-2')}")
-        
+
         # Test 3: List objects in bucket (first 10)
         response = s3.list_objects_v2(Bucket=bucket_name, MaxKeys=10)
         if 'Contents' in response:
@@ -56,11 +56,11 @@ def test_bucket_communication(bucket_name):  # pragma: no cover
                 print(f"   - {obj['Key']} (Size: {obj['Size']} bytes)")
         else:
             print("✅ Bucket is empty or no objects found")
-        
+
         # Test 4: Get bucket versioning status
         versioning = s3.get_bucket_versioning(Bucket=bucket_name)
         print(f"✅ Versioning status: {versioning.get('Status', 'Not enabled')}")
-        
+
         # Test 5: Check bucket policy (if accessible)
         try:
             policy = s3.get_bucket_policy(Bucket=bucket_name)
@@ -70,9 +70,9 @@ def test_bucket_communication(bucket_name):  # pragma: no cover
                 print("ℹ️  No bucket policy configured")
             else:
                 print(f"⚠️  Cannot read bucket policy: {e.response['Error']['Code']}")
-        
+
         return True
-        
+
     except ClientError as e:
         error_code = e.response['Error']['Code']
         if error_code == 'NoSuchBucket':
@@ -84,7 +84,7 @@ def test_bucket_communication(bucket_name):  # pragma: no cover
         else:
             print(f"❌ Error accessing bucket: {error_code} - {e.response['Error']['Message']}")
         return False
-    
+
     except Exception as e:
         print(f"❌ Unexpected error: {str(e)}")
         return False
@@ -95,9 +95,8 @@ if __name__ == "__main__":
     print("🔍 Testing S3 bucket communication...")
     s3, bucket_name = setup_s3_client()
     success = test_bucket_communication(bucket_name)
-    
+
     if success:
         print("\n🎉 Bucket communication test completed successfully!")
     else:
         print("\n💥 Bucket communication test failed!")
-

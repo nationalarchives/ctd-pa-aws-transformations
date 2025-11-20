@@ -19,6 +19,7 @@ import logging
 from datetime import datetime, timedelta
 import json
 import time as pytime
+from collections import OrderedDict
 
 def set_project_root(marker: str = "README.md") -> str:
     """
@@ -55,11 +56,11 @@ def find_key(obj, target):
 @contextlib.contextmanager
 def log_timing(operation_name: str, logger: Optional[logging.Logger] = None):
     """Context manager to log start time, end time, and duration of an operation.
-    
+
     Usage:
         with log_timing("XML conversion", logger):
             convert_to_json(...)
-    
+
     Parameters
     ----------
     operation_name : str
@@ -69,68 +70,58 @@ def log_timing(operation_name: str, logger: Optional[logging.Logger] = None):
     """
     if logger is None:
         logger = logging.getLogger(__name__)
-    
-    start = time.perf_counter()
-    start_ts = datetime.now().isoformat()
-    logger.info("Started %s at %s", operation_name, start_ts)
-    
+    start_perf = time.perf_counter()
+    start_wall = datetime.now().isoformat()
+    logger.info("Started %s at %s", operation_name, start_wall)
     try:
         yield
-    finally:
-        duration = time.perf_counter() - start
-        hours, rem = divmod(duration, 3600)
-        minutes, seconds = divmod(rem, 60)
-        end_ts = datetime.now().isoformat()
+    except Exception as exc:
+        duration = time.perf_counter() - start_perf
+        h, rem = divmod(duration, 3600)
+        m, s = divmod(rem, 60)
+        end_wall = datetime.now().isoformat()
+        logger.error(
+            "Failed %s at %s (duration %dh %dm %.2fs): %s",
+            operation_name, end_wall, int(h), int(m), s, exc
+        )
+        raise
+    else:
+        duration = time.perf_counter() - start_perf
+        h, rem = divmod(duration, 3600)
+        m, s = divmod(rem, 60)
+        end_wall = datetime.now().isoformat()
         logger.info(
             "Finished %s at %s (duration %dh %dm %.2fs)",
-            operation_name.lower(),
-            end_ts,
-            int(hours),
-            int(minutes),
-            seconds
+            operation_name, end_wall, int(h), int(m), s
         )
 
 
 @contextlib.contextmanager
-def progress_context(total: int, interval: int = 500, label: str = "process"):
-    """Lightweight progress reporting context.
-
-    Yields a ``tick(done_count)`` function. Call it every *interval* items
-    (or always, your choice) to print rate and ETA (HH:MM). No class
-    instantiation per iteration; minimal overhead.
-
-    Example:
-        with progress_context(total=N, interval=1000, label="xml->json") as tick:
-            for i in range(N):
-                # ... work ...
-                tick(i + 1)
-    """
+def progress_context(total: int, interval: int = 500, label: Optional[str] = "Processing"):
     start = pytime.time()
-
+    total = max(total, 0)
     def _format_line(done: int, elapsed: float) -> str:
-        rate = (done / elapsed) * 60.0 if elapsed > 0 else 0.0
+        if total == 0:
+            return f"[{label}] 0/0 (0%)"
+        rate = (done / elapsed) * 60.0 if elapsed > 0 and done else 0.0
         remaining = total - done
-        eta_secs = (remaining * (elapsed / done)) if done > 0 else 0
+        eta_secs = (remaining * (elapsed / done)) if done else 0
         eta_str = (datetime.now() + timedelta(seconds=eta_secs)).strftime("%H:%M")
-        return (f"[{label}] {done}/{total} ({done/total*100:.0f}%) | "
+        return (f"{label} [{done}/{total}] ({done/total*100:.0f}%) | "
                 f"Rate: {rate:.0f}/min | ETA ~ {eta_str}    ")
-
     def tick(done: int):
-        # Suppress final print; handled once in finally
         if done == total:
             return
-        if done % interval == 0:
+        if done and interval and (done % interval == 0):
             elapsed = pytime.time() - start
             print(_format_line(done, elapsed), end='\r')
-
     try:
         yield tick
     finally:
         elapsed = pytime.time() - start
-        # Final line (no carriage return; ends with newline)
         print(_format_line(total, elapsed))
-        # Ensure cursor on next line
         print()
+
 
 # helper to format duration
 def _fmt_duration(seconds: float) -> str:
@@ -287,7 +278,7 @@ def _load_json_file(path: Optional[str], logger) -> dict:
 
 def filter_xml_by_iaid(xml_path: Union[str, Path], target_iaid: str, output_path: Union[str, Path], logger) -> Path:
     """Filter XML to only include the record with specified citableReference.
-    
+
     Parameters
     ----------
     xml_path : path-like
@@ -298,7 +289,7 @@ def filter_xml_by_iaid(xml_path: Union[str, Path], target_iaid: str, output_path
         Path where filtered XML will be saved
     logger : logging.Logger
         Logger instance
-    
+
     Returns
     -------
     Path
@@ -306,12 +297,12 @@ def filter_xml_by_iaid(xml_path: Union[str, Path], target_iaid: str, output_path
     """
     xml_path = Path(xml_path)
     output_path = Path(output_path)
-    
+
     logger.info("Filtering XML for alternative_number: %s", target_iaid)
-    
+
     tree = ET.parse(xml_path)
     root = tree.getroot()
-    
+
     # Find all record elements (not InformationObject - that's the root container)
     found_record = None
     for record in root.findall('.//record'):
@@ -321,7 +312,7 @@ def filter_xml_by_iaid(xml_path: Union[str, Path], target_iaid: str, output_path
             found_record = record
             logger.info("Found record with alternative_number %s", target_iaid)
             break
-        
+
         # Also try without the type filter (in case structure varies)
         if found_record is None:
             for alt_num in record.findall('.//alternative_number'):
@@ -331,21 +322,21 @@ def filter_xml_by_iaid(xml_path: Union[str, Path], target_iaid: str, output_path
                     break
             if found_record is not None:
                 break
-    
+
     if found_record is None:
         logger.warning("Record with alternative_number %s not found in XML file", target_iaid)
         raise ValueError(f"Record with alternative_number {target_iaid} not found in {xml_path}")
-    
+
     # Create new XML with just this record
     new_root = ET.Element(root.tag, attrib=root.attrib)
     new_root.append(found_record)
     new_tree = ET.ElementTree(new_root)
-    
+
     # Save filtered XML
     output_path.parent.mkdir(parents=True, exist_ok=True)
     new_tree.write(output_path, encoding='utf-8', xml_declaration=True)
     logger.info("Saved filtered XML to %s", output_path)
-    
+
     return output_path
     
 ############################
@@ -445,3 +436,14 @@ def update_transfer_register_with_records(transfer_register, records, source_fil
 
     logger.info("Added %d records to transfer register, skipped %d leaf records", added_count, skipped_count)
     return transfer_register
+
+
+def insert_ordered(original_dict, key, value, position):
+    new_dict = OrderedDict()
+    for i, (k, v) in enumerate(original_dict.items()):
+        if i == position:
+            new_dict[key] = value
+        new_dict[k] = v
+    if position >= len(original_dict):
+        new_dict[key] = value
+    return new_dict
