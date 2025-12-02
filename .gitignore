@@ -3,6 +3,7 @@ data/
 scripts/
 dist/
 ctd_pa_lambda_discovery/
+ctd_pa_to_discovery/
 python/
 test_venv/
 build/
