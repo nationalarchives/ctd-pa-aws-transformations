@@ -211,7 +211,7 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
         }
     ]
 
-        elif heldBy_information == "British Film Institute":
+        elif heldBy_information == "British Film Institute (BFI) National Archive":
             heldBy = [
         {
         "xReferenceId": "A13532152",
@@ -336,10 +336,11 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
 
         digitised = record.find("digitised")
         digitised = digitised.text if digitised is not None else None
-        if digitised is None:
-            digitised = False
+
         if digitised == "x":
             digitised = True
+        else:
+            digitised = False
 
     ########################### formerReferenceDep ###################################################
 
@@ -509,10 +510,13 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
 
 
         #registryRecords -- not used and not in JSON template
+    
+    ################################ restrictionsOnUse ##############################################################
 
-        #restrictionsOnUse = record.find("copyright_note")
-        #restrictionsOnUse = restrictionsOnUse.text if restrictionsOnUse is not None else None
-
+        if digitised == False and heldBy_information == "British Film Institute (BFI) National Archive":
+            restrictionsOnUse = "This record is not currently accessible in a playable format and is unavailable for public viewing"
+        else:
+            restrictionsOnUse = None
 
     ##################################### scopeContent ##################################################################
 
@@ -640,7 +644,7 @@ def convert_to_json(xml_path: str, output_dir: str, remove_empty_fields: bool = 
                         "publicationNote": publicationNote,
                         "relatedMaterial": relatedMaterial,
                         "separatedMaterial": separatedMaterial,
-                        #"restrictionsOnUse": restrictionsOnUse,
+                        "restrictionsOnUse": restrictionsOnUse,
                         "scopeContent": scopeContent,
                         #"sortKey": None,
                         "source": "PA",
