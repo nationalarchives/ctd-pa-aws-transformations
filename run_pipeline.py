@@ -382,7 +382,10 @@ def lambda_handler(event, context):
         replica_iaids_added = []
 
         # Collect transformed JSONs by level (in memory)
-        jsons_by_level = {}  # {level_name: [(filename, json_dict), ...]}
+        # Separate normal vs digitised records so they can be tarred independently
+        jsons_by_level = {}  # legacy: for backwards-compat if used elsewhere
+        jsons_by_level_normal = {}  # {level_name: [(filename, json_dict), ...]}
+        jsons_by_level_digitised = {}
         replica_filedata_count = 0
         logger.info("Applying transformations to %d JSON files...", len(converted_xml_to_json_files))
         with progress_context(total = len(converted_xml_to_json_files), interval=100, label="Transforming") as tick:
@@ -505,19 +508,33 @@ def lambda_handler(event, context):
 
                     # Save the final transformed JSON
                     # Collect in memory by level (no disk writes except in DEBUG mode)
+                    # Decide whether this record is digitised.
+                    # Only use the replica metadata filenames to determine digitised records
+                    # and only when the FILTER_REPLICA_METADATA env flag is enabled.
+                    separate_digitised = os.getenv("FILTER_REPLICA_METADATA", "false").strip().lower() in truthy_chars
+                    is_digitised = False
+                    try:
+                        if separate_digitised and filename in replica_metadata_filenames:
+                            is_digitised = True
+                    except Exception:
+                        is_digitised = False
+
                     if use_level_subfolders:
                         level = str(next((v for v in find_key(transformed_json,
                                                               "catalogueLevel")), None))
                         dir_name = record_level_mapping.get(level, "UNKNOWN").lower().replace(" ", "_")
-                        # Collect in memory by level
-                        if dir_name not in jsons_by_level:
-                            jsons_by_level[dir_name] = []
-                        jsons_by_level[dir_name].append((filename, transformed_json))
                     else:
-                        # No level-based dirs, collect as "root"
-                        if "root" not in jsons_by_level:
-                            jsons_by_level["root"] = []
-                        jsons_by_level["root"].append((filename, transformed_json))
+                        dir_name = "root"
+
+                    target_map = jsons_by_level_digitised if is_digitised else jsons_by_level_normal
+                    if dir_name not in target_map:
+                        target_map[dir_name] = []
+                    target_map[dir_name].append((filename, transformed_json))
+
+                    # maintain legacy container for any existing code paths
+                    if dir_name not in jsons_by_level:
+                        jsons_by_level[dir_name] = []
+                    jsons_by_level[dir_name].append((filename, transformed_json))
                 except Exception:
                     logger.exception("Error applying transformations for file %s",
                                      f"{filename}.json")
@@ -559,132 +576,134 @@ def lambda_handler(event, context):
     payload = replica_filedata_count
     logger.info("Replica filedata count: %s", json.dumps(payload, indent=2))
 
-    # Create in-memory tarballs for each level
-    if jsons_by_level and run_mode in ['local_s3', 'remote_s3']:
+    # Create in-memory tarballs for each level (normal and digitised) and upload
+    if (jsons_by_level_normal or jsons_by_level_digitised) and run_mode in ['local_s3', 'remote_s3']:
         with log_timing("Creating tarballs", logger):
-            logger.info("Creating %d tarball(s) in memory...", len(jsons_by_level))
+            # Determine tree name for tar naming
             tree_name = Path(key).stem.lower().replace(" ", "_")
-            print(key)
-            print("tree_name:", tree_name)
-            level_tarballs = {}  # {level_name: tar_bytes}
+            logger.info("Creating tarballs for tree: %s", tree_name)
+            level_tarballs = {}  # {level_key: [(tar_name, tar_bytes), ...]}
             # Batch files per level into tarballs of up to 10,000 JSON files each
             BATCH_SIZE = 10000
-            for level_name, files in jsons_by_level.items():
-                # files is a list of (filename, json_data)
-                total_files = len(files)
-                logger.info("Level '%s' has %d files; batching into %d-file chunks", level_name, total_files, BATCH_SIZE)
 
-                # Create chunks of files
-                chunks = [files[i:i + BATCH_SIZE] for i in range(0, total_files, BATCH_SIZE)]
-                cumulative_count = 0
+            def _create_level_tarballs(map_dict, suffix=""):
+                # suffix should include leading underscore if desired (e.g. "_digitised")
+                for level_name, files in map_dict.items():
+                    total_files = len(files)
+                    logger.info("Level '%s'%s has %d files; batching into %d-file chunks",
+                                level_name, suffix, total_files, BATCH_SIZE)
 
-                for chunk_index, chunk in enumerate(chunks, start=1):
-                    cumulative_count += len(chunk)
-                    # Name tarball with cumulative end count: <tree>_<level>_N.tar.gz where N is cumulative_count
-                    tarball_name = f"{tree_name}_{level_name}_{cumulative_count}.tar.gz"
+                    # Create chunks of files
+                    chunks = [files[i:i + BATCH_SIZE] for i in range(0, total_files, BATCH_SIZE)]
+                    cumulative_count = 0
 
-                    buf = io.BytesIO()
-                    try:
-                        with tarfile.open(fileobj=buf, mode="w:gz") as tar:
-                            for filename, json_data in chunk:
-                                safe_name = f"{Path(filename).name}.json"
-                                json_bytes = json.dumps(json_data, ensure_ascii=False,
-                                                        indent=2).encode("utf-8")
-                                ti = tarfile.TarInfo(name=safe_name)
-                                ti.size = len(json_bytes)
-                                ti.mtime = int(time.time())
-                                tar.addfile(ti, fileobj=io.BytesIO(json_bytes))
+                    for chunk_index, chunk in enumerate(chunks, start=1):
+                        cumulative_count += len(chunk)
+                        # Name tarball with cumulative end count: <tree>_<level>_N[_suffix].tar.gz
+                        tarball_name = f"{tree_name}_{level_name}_{cumulative_count}{suffix}.tar.gz"
 
-                        buf.seek(0)
-                        tar_bytes = buf.getvalue()
-                        file_count = len(chunk)
-                        logger.info("Created in-memory tarball: %s (%d files, %d bytes)",
-                                    tarball_name, file_count, len(tar_bytes))
+                        buf = io.BytesIO()
+                        try:
+                            with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+                                for filename, json_data in chunk:
+                                    safe_name = f"{Path(filename).name}.json"
+                                    json_bytes = json.dumps(json_data, ensure_ascii=False, indent=2).encode("utf-8")
+                                    ti = tarfile.TarInfo(name=safe_name)
+                                    ti.size = len(json_bytes)
+                                    ti.mtime = int(time.time())
+                                    tar.addfile(ti, fileobj=io.BytesIO(json_bytes))
 
-                        # Store tar bytes under a compound key so super-tar builder can include them
-                        # Use a level-specific list to preserve ordering
-                        if level_name not in level_tarballs:
-                            level_tarballs[level_name] = []
-                        level_tarballs[level_name].append((tarball_name, tar_bytes))
+                            buf.seek(0)
+                            tar_bytes = buf.getvalue()
+                            file_count = len(chunk)
+                            logger.info("Created in-memory tarball: %s (%d files, %d bytes)",
+                                        tarball_name, file_count, len(tar_bytes))
 
-                        # Write tar by folder in local mode
-                        if run_mode == "local":
-                            tarball_path = Path(output_dir) / tarball_name
-                            with tarball_path.open("wb") as f:
-                                f.write(tar_bytes)
-                            logger.info("Saved tarball locally: %s", tarball_path)
+                            level_key = f"{level_name}{suffix}"
+                            if level_key not in level_tarballs:
+                                level_tarballs[level_key] = []
+                            level_tarballs[level_key].append((tarball_name, tar_bytes))
 
-                    except Exception:
-                        logger.exception("Error creating tarball for level %s (chunk %d)", level_name, chunk_index)
-                        result = {"status": "error", "message": f"Error creating tarball for level {level_name} chunk {chunk_index}"}
-                        logger.info("Pipeline result: %s", json.dumps(result))
-                        return result
+                            # Write tar by folder in local mode for convenience
+                            if run_mode == "local":
+                                tarball_path = Path(output_dir) / tarball_name
+                                with tarball_path.open("wb") as f:
+                                    f.write(tar_bytes)
+                                logger.info("Saved tarball locally: %s", tarball_path)
+
+                        except Exception:
+                            logger.exception("Error creating tarball for level %s (chunk %d)", level_name, chunk_index)
+                            result = {"status": "error", "message": f"Error creating tarball for level {level_name} chunk {chunk_index}"}
+                            logger.info("Pipeline result: %s", json.dumps(result))
+                            raise
+
+            # Build tarballs for normal and digitised sets
+            try:
+                _create_level_tarballs(jsons_by_level_normal, suffix="")
+                _create_level_tarballs(jsons_by_level_digitised, suffix="_digitised")
+            except Exception:
+                return_result = {"status": "error", "message": "Failed to create one or more tarballs"}
+                logger.info("Pipeline result: %s", json.dumps(return_result))
+                return return_result
 
             # Upload to S3 in S3 modes (local_s3 or remote_s3)
-            # we need to create a super-tarball containing all level tarballs
-            if run_mode in ["local_s3", "remote_s3"]:
-                if not bucket:
-                    result = {"status": "error", "message": "No S3 bucket specified"}
-                    logger.info("Pipeline result: %s", json.dumps(result))
-                    return result
+            if not bucket:
+                result = {"status": "error", "message": "No S3 bucket specified"}
+                logger.info("Pipeline result: %s", json.dumps(result))
+                return result
 
-                super_tarball_name = f"{tree_name}.tar.gz"
-                logger.info("Creating super-tarball: %s with %d level tarballs",
-                            super_tarball_name, len(level_tarballs))
+            super_tarball_name = f"{tree_name}.tar.gz"
+            logger.info("Creating super-tarball: %s with %d level tarballs",
+                        super_tarball_name, len(level_tarballs))
 
-                # Create super-tarball containing all level tarballs
-                super_buf = io.BytesIO()
-                with tarfile.open(fileobj=super_buf, mode="w:gz") as super_tar:
-                    # level_tarballs now maps level_name -> list of (tar_name, tar_bytes)
-                    for level_name, tar_entries in level_tarballs.items():
-                        for tar_name, tar_bytes in tar_entries:
-                            ti = tarfile.TarInfo(name=tar_name)
-                            ti.size = len(tar_bytes)
-                            ti.mtime = int(time.time())
-                            super_tar.addfile(ti, fileobj=io.BytesIO(tar_bytes))
-                            logger.info("Added %s to super-tarball (%d bytes)", tar_name, len(tar_bytes))
+            # Create super-tarball containing all level tarballs
+            super_buf = io.BytesIO()
+            with tarfile.open(fileobj=super_buf, mode="w:gz") as super_tar:
+                # level_tarballs maps level_key -> list of (tar_name, tar_bytes)
+                for level_key, tar_entries in level_tarballs.items():
+                    for tar_name, tar_bytes in tar_entries:
+                        ti = tarfile.TarInfo(name=tar_name)
+                        ti.size = len(tar_bytes)
+                        ti.mtime = int(time.time())
+                        super_tar.addfile(ti, fileobj=io.BytesIO(tar_bytes))
+                        logger.info("Added %s to super-tarball (%d bytes)", tar_name, len(tar_bytes))
 
-                super_buf.seek(0)
-                super_tar_bytes = super_buf.getvalue()
-                logger.info("Created super-tarball: %s (%d bytes)",
-                            super_tarball_name, len(super_tar_bytes))
+            super_buf.seek(0)
+            super_tar_bytes = super_buf.getvalue()
+            logger.info("Created super-tarball: %s (%d bytes)", super_tarball_name, len(super_tar_bytes))
 
-                # Upload to json_outputs folder in S3, creating a subfolder for the supertar
-                folder_name = tree_name  # Use tree_name as the folder name
-                folder_key = f"{output_prefix}/{folder_name}/"
-                
-                # Upload the supertar into the folder
-                tar_key = f"{folder_key}{super_tarball_name}"
-                try:
-                    s3.put_object(Bucket=bucket, Key=tar_key, Body=super_tar_bytes)
-                    logger.info("Uploaded supertar to s3://%s/%s", bucket, tar_key)
-                    
-                    # Extract and upload each subtar (level tarball) into the same folder
-                    super_buf.seek(0)
-                    # Upload each contained tar (we have them in level_tarballs already)
-                    for level_name, tar_entries in level_tarballs.items():
-                        for tar_name, tar_bytes in tar_entries:
-                            subtar_key = f"{folder_key}{tar_name}"
-                            s3.put_object(Bucket=bucket, Key=subtar_key, Body=tar_bytes)
-                            logger.info("Uploaded subtar to s3://%s/%s", bucket, subtar_key)
-                    
-                    # Update transfer register with newly uploaded records
-                    if transfer_register is not None:
-                        transfer_register = update_transfer_register_with_records(transfer_register, converted_xml_to_json_files,
-                                                                                   key, bucket, output_prefix, logger)
-                        try:
-                            save_transfer_register(transfer_register_filename, s3, bucket, output_prefix, transfer_register, logger)
-                            logger.info("Updated transfer register with %d total records", len(transfer_register.get('records', {})))
-                        except Exception:
-                            logger.exception("Error saving transfer register (non-fatal)")
-                            
-                except ClientError as e:
-                    logger.exception("Error uploading tarballs to S3: %s",
-                                    e.response.get('Error', {}).get('Code'))
-                    result = {"status": "error",
-                            "message": f"Error uploading tarballs to S3: {e.response.get('Error', {}).get('Code')}"}
-                    logger.info("Pipeline result: %s", json.dumps(result))
-                    return result
+            # Upload to json_outputs folder in S3, creating a subfolder for the supertar
+            folder_name = tree_name  # Use tree_name as the folder name
+            folder_key = f"{output_prefix}/{folder_name}/"
+
+            # Upload the supertar into the folder and then each contained sub-tar
+            tar_key = f"{folder_key}{super_tarball_name}"
+            try:
+                s3.put_object(Bucket=bucket, Key=tar_key, Body=super_tar_bytes)
+                logger.info("Uploaded supertar to s3://%s/%s", bucket, tar_key)
+
+                # Upload each contained level tarball
+                for level_key, tar_entries in level_tarballs.items():
+                    for tar_name, tar_bytes in tar_entries:
+                        subtar_key = f"{folder_key}{tar_name}"
+                        s3.put_object(Bucket=bucket, Key=subtar_key, Body=tar_bytes)
+                        logger.info("Uploaded subtar to s3://%s/%s", bucket, subtar_key)
+
+                # Update transfer register with newly uploaded records
+                if transfer_register is not None:
+                    transfer_register = update_transfer_register_with_records(transfer_register, converted_xml_to_json_files,
+                                                                               key, bucket, output_prefix, logger)
+                    try:
+                        save_transfer_register(transfer_register_filename, s3, bucket, output_prefix, transfer_register, logger)
+                        logger.info("Updated transfer register with %d total records", len(transfer_register.get('records', {})))
+                    except Exception:
+                        logger.exception("Error saving transfer register (non-fatal)")
+
+            except ClientError as e:
+                logger.exception("Error uploading tarballs to S3: %s", e.response.get('Error', {}).get('Code'))
+                result = {"status": "error", "message": f"Error uploading tarballs to S3: {e.response.get('Error', {}).get('Code')}"}
+                logger.info("Pipeline result: %s", json.dumps(result))
+                return result
 
 
 
