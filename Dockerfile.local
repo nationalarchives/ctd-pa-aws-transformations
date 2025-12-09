@@ -1,0 +1,24 @@
+# Local testing Dockerfile using Python 3.12
+FROM public.ecr.aws/lambda/python:3.12
+
+# Install system dependencies
+RUN yum install -y gcc python3-devel && yum clean all
+
+# Set working directory
+WORKDIR ${LAMBDA_TASK_ROOT}
+
+# Copy and install Python dependencies (minimal for local testing)
+COPY requirements-lambda.txt requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy source code
+COPY src/ ./src/
+COPY lambda_handler.py .
+
+# Verify structure
+RUN ls -la ${LAMBDA_TASK_ROOT} && \
+    ls -la ${LAMBDA_TASK_ROOT}/src/ && \
+    python -c "import sys; print(f'Python {sys.version}')"
+
+# Set the Lambda handler
+CMD [ "lambda_handler.lambda_handler" ]

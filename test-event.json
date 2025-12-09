@@ -1,0 +1,30 @@
+{
+  "bucket": "ctd-pa-elt-data-processing-bucket",
+  "key": "xml_input/sample_file.xml",
+  "transformation_index": 1,
+  "transformation_config": {
+    "1": {
+      "operation": "convert",
+      "target_fields": [],
+      "parameters": {},
+      "description": "Convert XML to JSON format"
+    },
+    "2": {
+      "operation": "newline_to_p",
+      "target_fields": ["scopecontent.p"],
+      "parameters": {},
+      "description": "Replace newline characters with <p> tags in scopecontent"
+    },
+    "3": {
+      "operation": "y_naming",
+      "target_fields": ["department"],
+      "parameters": {},
+      "description": "Add 'Y' prefix to department codes"
+    }
+  },
+  "execution_id": "test-execution-001",
+  "metadata": {
+    "source": "step-functions",
+    "started_at": "2025-12-04T10:00:00Z"
+  }
+}

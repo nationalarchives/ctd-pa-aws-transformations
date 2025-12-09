@@ -1,31 +1,53 @@
+# IDE files
 /.idea/
+.vscode/
+
+# Local data and artifacts
 data/
-scripts/
 dist/
-ctd_pa_lambda_discovery/
-ctd_pa_to_discovery/
 python/
 test_venv/
-build/
-tools/
+logs/
+local-s3-data/
+test-data/
+__pycache__/
+*egg-info/
+
+# Python caches
+*.pyc
 
 # Configuration files
 *.yaml
 *.yml
 trigger.json
 *.env
-*.pyc
-*.zip
+samconfig.toml
+samconfig.toml.bak
 
-/logs/
+# SAM build artifacts
+.aws-sam/
+response.json
 
-# temp buckets
+# Old script/tooling folders
+scripts/
+tools/
+ctd_pa_lambda_discovery/
+ctd_pa_to_discovery/
+
+# Temp buckets from older local tests
 xml_input/
 json_outputs/
 
 # specific notebooks
 notebooks/
 
-# vscode related
+# Workspace files
 ctd-pa-transformations-for-discovery.code-workspace
-.vscode/
+
+# Old deployment files
+LAMBDA_SETUP.md
+DEPLOYMENT.md
+deploy-lambda.ps1
+
+# Archives
+*.zip
