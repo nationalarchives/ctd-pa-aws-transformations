@@ -4,17 +4,17 @@ Maps operation names to transformer classes.
 """
 from .base import BaseTransformer
 from .xml_converter import XMLConverterTransformer
-from .newline_to_p import NewlineToPTransformerWrapper
-from .y_naming import YNamingTransformerWrapper
-from .replica_metadata import ReplicaMetadataTransformerWrapper
+from .newline_to_p import NewlineToPTransformer
+from .y_naming import YNamingTransformer
+from .replica_metadata import ReplicaMetadataTransformer
 
 
 # Plugin registry mapping operation names to transformer classes
 TRANSFORMER_REGISTRY = {
     'convert': XMLConverterTransformer,
-    'newline_to_p': NewlineToPTransformerWrapper,
-    'y_naming': YNamingTransformerWrapper,
-    'replica_metadata': ReplicaMetadataTransformerWrapper,
+    'newline_to_p': NewlineToPTransformer,
+    'y_naming': YNamingTransformer,
+    'replica_metadata': ReplicaMetadataTransformer,
 }
 
 
@@ -22,7 +22,7 @@ __all__ = [
     'BaseTransformer',
     'TRANSFORMER_REGISTRY',
     'XMLConverterTransformer',
-    'NewlineToPTransformerWrapper',
-    'YNamingTransformerWrapper',
-    'ReplicaMetadataTransformerWrapper',
+    'NewlineToPTransformer',
+    'YNamingTransformer',
+    'ReplicaMetadataTransformer',
 ]
