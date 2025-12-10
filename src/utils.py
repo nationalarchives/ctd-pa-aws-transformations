@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import xml.etree.ElementTree as ET
-from typing import Iterable, List, Optional, Sequence, Union
+from typing import Any, Iterable, List, Optional, Sequence, Union
 from dotenv import load_dotenv
 import contextlib
 import time
@@ -21,6 +21,9 @@ from datetime import datetime, timedelta
 import json
 import time as pytime
 from collections import OrderedDict
+import re
+import io
+import tarfile
 
 
 def get_trans_config(logger: Optional[logging.Logger] = None):
@@ -292,6 +295,7 @@ __all__ = [
     "merge_xml_files",
 ]
 
+
 def _load_json_file(path: Optional[str], logger) -> dict:
     """Load JSON from a file path or from a JSON string stored in an env var.
     Returns an empty dict on error or when no input provided.
@@ -317,6 +321,7 @@ def _load_json_file(path: Optional[str], logger) -> dict:
     except Exception:
         logger.exception("TRANS_CONFIG value is not a valid JSON string or file: %s", s[:200])
         return {}
+
 
 def filter_xml_by_iaid(xml_path: Union[str, Path], target_iaid: str, output_path: Union[str, Path], logger) -> Path:
     """Filter XML to only include the record with specified citableReference.
@@ -380,7 +385,8 @@ def filter_xml_by_iaid(xml_path: Union[str, Path], target_iaid: str, output_path
     logger.info("Saved filtered XML to %s", output_path)
 
     return output_path
-    
+
+  
 ############################
 # transfer register helpers
 ############################
@@ -398,6 +404,7 @@ def load_transfer_register(register_filename, s3, bucket, s3_output_folder, logg
     except Exception as e:
         logger.exception("Error loading transfer register: %s", e)
         return {"last_updated": None, "total_records": 0, "records": {}}
+
 
 def save_transfer_register(register_filename, s3, bucket, output_dir, register, logger):
     """Save the transfer register to S3 with a timestamped backup of existing (backward compatible with manifest)."""
@@ -425,6 +432,7 @@ def save_transfer_register(register_filename, s3, bucket, output_dir, register, 
     except Exception as e:
         logger.exception("Error saving transfer register: %s", e)
 
+
 def filter_new_records(records, transfer_register, logger):
     """Filter out already-uploaded records using transfer register"""
     uploaded_iaids = set(transfer_register.get('records', {}).keys())
@@ -440,6 +448,7 @@ def filter_new_records(records, transfer_register, logger):
 
     logger.info("Filtered %d new records (skipped %d duplicates)", len(new_records), skipped_count)
     return new_records
+
 
 def update_transfer_register_with_records(transfer_register, records, source_file, bucket, s3_output_folder, logger):
     """Add newly uploaded records to transfer register (excluding the deepest/leaf level)."""
@@ -489,3 +498,137 @@ def insert_ordered(original_dict, key, value, position):
     if position >= len(original_dict):
         new_dict[key] = value
     return new_dict
+
+
+def get_by_path(obj: Any, path: str, default: Any = None) -> Any:
+    """
+    Get a value from a nested object using dot notation.
+    Supports list indexing with brackets, e.g., "record.field[0].subfield".
+    """
+    if not path:
+        return obj
+        
+    parts = re.split(r'\.|\[(\d+)\]', path)
+    parts = [part for part in parts if part] # Filter out empty strings from split
+
+    current = obj
+    for part in parts:
+        if isinstance(current, list):
+            try:
+                idx = int(part)
+                if 0 <= idx < len(current):
+                    current = current[idx]
+                else:
+                    return default
+            except (ValueError, IndexError):
+                return default
+        elif isinstance(current, dict):
+            current = current.get(part, default)
+            if current is default:
+                return default
+        else:
+            return default
+    return current
+
+
+def set_by_path(obj: Any, path: str, value: Any) -> bool:
+    """
+    Set a value in a nested object using dot notation.
+    Supports list indexing and creates intermediate dicts if they don't exist.
+    Returns True on success, False on failure.
+    """
+    if not path:
+        return False
+
+    parts = re.split(r'\.|\[(\d+)\]', path)
+    parts = [p for p in parts if p]
+
+    current = obj
+    for i, part in enumerate(parts[:-1]):
+        is_list_access = part.isdigit() and isinstance(current, list)
+        
+        if is_list_access:
+            idx = int(part)
+            if 0 <= idx < len(current):
+                if i + 1 < len(parts):
+                    next_part_is_digit = parts[i+1].isdigit()
+                    if not isinstance(current[idx], list if next_part_is_digit else dict):
+                        return False # Path conflict
+                current = current[idx]
+            else:
+                return False # Index out of bounds
+        elif isinstance(current, dict):
+            next_part_is_digit = parts[i+1].isdigit()
+            if part not in current or not isinstance(current[part], list if next_part_is_digit else dict):
+                current[part] = [] if next_part_is_digit else {}
+            current = current[part]
+        else:
+            return False # Path conflict
+
+    last_part = parts[-1]
+    if last_part.isdigit() and isinstance(current, list):
+        idx = int(last_part)
+        if 0 <= idx < len(current):
+            current[idx] = value
+            return True
+        elif idx == len(current): # Allow appending
+            current.append(value)
+            return True
+        else:
+            return False # Index out of bounds
+    elif isinstance(current, dict):
+        current[last_part] = value
+        return True
+        
+    return False
+
+
+def _create_level_tarballs(map_dict: dict,
+                           logger: object, 
+                           tree_name: str,
+                           level_tarballs: dict[List[tuple[str, bytes]]],
+                           batch_size: int=10000,
+                           suffix="") -> dict:
+    # suffix should include leading underscore if desired (e.g. "_digitised")
+    for level_name, files in map_dict.items():
+        total_files = len(files)
+        logger.info("Level '%s'%s has %d files; batching into %d-file chunks",
+                    level_name, suffix, total_files, batch_size)
+
+        # Create chunks of files
+        chunks = [files[i:i + batch_size] for i in range(0, total_files, batch_size)]
+        cumulative_count = 0
+
+        for chunk_index, chunk in enumerate(chunks, start=1):
+            cumulative_count += len(chunk)
+            # Name tarball with cumulative end count: <tree>_<level>_N[_suffix].tar.gz
+            tarball_name = f"{tree_name}_{level_name}_{cumulative_count}{suffix}.tar.gz"
+
+            buf = io.BytesIO()
+            try:
+                with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+                    for filename, json_data in chunk:
+                        safe_name = f"{Path(filename).name}.json"
+                        json_bytes = json.dumps(json_data, ensure_ascii=False, indent=2).encode("utf-8")
+                        ti = tarfile.TarInfo(name=safe_name)
+                        ti.size = len(json_bytes)
+                        ti.mtime = int(time.time())
+                        tar.addfile(ti, fileobj=io.BytesIO(json_bytes))
+
+                buf.seek(0)
+                tar_bytes = buf.getvalue()
+                file_count = len(chunk)
+                logger.info("Created in-memory tarball: %s (%d files, %d bytes)",
+                            tarball_name, file_count, len(tar_bytes))
+
+                level_key = f"{level_name}{suffix}"
+                if level_key not in level_tarballs:
+                    level_tarballs[level_key] = []
+                level_tarballs[level_key].append((tarball_name, tar_bytes))
+
+            except Exception:
+                logger.exception("Error creating tarball for level %s (chunk %d)", level_name, chunk_index)
+                result = {"status": "error", "message": f"Error creating tarball for level {level_name} chunk {chunk_index}"}
+                logger.info("Pipeline result: %s", json.dumps(result))
+                raise
+    return level_tarballs

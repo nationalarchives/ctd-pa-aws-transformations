@@ -1,5 +1,5 @@
 """
-Newline to paragraph transformer.
+Generic text replacement transformer.
 """
 import re
 import copy
@@ -8,34 +8,37 @@ from typing import Any, Dict, Optional, Iterable
 from .base import BaseTransformer
 
 
-class NewlineToPTransformer(BaseTransformer):
+class TextReplaceTransformer(BaseTransformer):
     """
-    Replaces newlines with <p> tags in specified fields.
+    Replaces text in specified fields based on a regex pattern.
     If `target_fields` is not provided, it applies to all string values.
     
     Config parameters:
-        target_fields: List of field paths to transform (e.g., ["scopecontent.p"]) (optional)
-        match: Regex pattern to replace (default: "\\n")
-        replace: String to replace with (default: "<p>")
+        match: The regex pattern to search for.
+        replace: The string to replace matches with.
+        target_fields: List of field paths to transform (optional).
     """
 
     def execute(self, data: Any, config: Dict[str, Any], context: Dict[str, Any]) -> Any:
         """
-        Apply newline to paragraph transformation.
+        Apply text replacement.
         
         Args:
-            data: JSON dict to transform
-            config: May contain 'target_fields', 'match', 'replace'
-            context: Runtime context (not used)
+            data: JSON dict to transform.
+            config: Must contain 'match' and 'replace'. Can contain 'target_fields'.
+            context: Runtime context (not used).
             
         Returns:
-            Transformed JSON dict
+            Transformed JSON dict.
         """
         target_fields = config.get('target_fields')
-        match = config.get('match', r'\\n')
-        replace = config.get('replace', '<p>')
+        match = config.get('match')
+        replace = config.get('replace')
+
+        if match is None or replace is None:
+            raise ValueError("TextReplaceTransformer requires 'match' and 'replace' in config")
         
-        logic = NewlineToPLogic(
+        logic = TextReplaceLogic(
             target_columns=target_fields,
             match=match,
             replace=replace
@@ -44,22 +47,29 @@ class NewlineToPTransformer(BaseTransformer):
         return logic.transform(data)
 
 
-class NewlineToPLogic:
-    def __init__(self, target_columns: Optional[Iterable[str]] = None, match="\\n", replace="<p>"):
+class TextReplaceLogic:
+    def __init__(self, target_columns: Optional[Iterable[str]] = None, match: str = "", replace: str = ""):
         self.target_columns = target_columns
         self.match = match
         self.replace = replace
         self.regex = re.compile(self.match)
 
     def _transform_string(self, s: str) -> str:
-        """Apply the newline -> <p> policy to a single string."""
+        """Apply the replacement policy to a single string."""
         if not isinstance(s, str):
             return s
+        
+        # Normalize line endings to handle cross-platform variations
         text = s.replace('\r\n', '\n').replace('\r', '\n')
+        
         try:
             return self.regex.sub(self.replace, text)
-        except Exception:
-            return re.sub(r'\n+', self.replace, text)
+        except re.error as e:
+            # Log the error and fall back to a simple string replacement
+            # This handles cases where the 'match' string is not a valid regex
+            print(f"Regex error: {e}. Falling back to simple string replacement.")
+            return text.replace(self.match, self.replace)
+
 
     def _walk_and_transform(self, obj):
         """Recursively walk dict/list and transform all string values in-place."""

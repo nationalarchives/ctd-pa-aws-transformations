@@ -2,6 +2,9 @@
 /.idea/
 .vscode/
 
+# Virtual environments
+.venv/
+
 # Local data and artifacts
 data/
 dist/
@@ -51,3 +54,8 @@ deploy-lambda.ps1
 
 # Archives
 *.zip
+open-local-data-folder.ps1
+src/transformers/transformers.py
+state-machine.json
+setup_venv copy.ps1
+init-local-env.ps1

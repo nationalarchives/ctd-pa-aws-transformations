@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 import logging
 import boto3
+import tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,9 @@ class StorageClient:
         
         # Check for LocalStack endpoint
         endpoint_url = os.getenv('AWS_ENDPOINT_URL') or os.getenv('LOCALSTACK_ENDPOINT')
+
+        # Determine the platform-agnostic path for local testing
+        local_s3_root = Path(tempfile.gettempdir()) / 'local-s3-data'
         
         if endpoint_url:
             # LocalStack mode
@@ -29,15 +33,16 @@ class StorageClient:
                 endpoint_url=endpoint_url,
                 aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID', 'test'),
                 aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY', 'test'),
-                region_name=os.getenv('AWS_DEFAULT_REGION', 'us-east-1')
+                region_name=os.getenv('AWS_DEFAULT_REGION', 'eu-west-2')
             )
             self.local_mode = False
             self.local_root = None
-        elif os.path.exists('/tmp/local-s3-data'):
+        elif os.path.exists(local_s3_root):
             # Local filesystem mode
-            logger.info("Running in LOCAL FILESYSTEM mode - using /tmp/local-s3-data")
+            logger.info("Running in LOCAL FILESYSTEM mode - using %s", local_s3_root)
+            print(f"\n[LOCAL MODE] Your data folder is located at: {local_s3_root}\n")
             self.local_mode = True
-            self.local_root = Path('/tmp/local-s3-data')
+            self.local_root = local_s3_root
             self.s3_client = None
         else:
             # AWS mode
