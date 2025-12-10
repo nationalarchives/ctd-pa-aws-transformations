@@ -1,65 +1,31 @@
-# Introduction
-This repository is a [template repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-repository-from-a-template).
+# CTD AWS Transformations
 
-When you want to create a new DA repository, you should do so by using this template.  Hint: click the green button above that says "Use this template".
+This repository contains the code for the CTD (Catalogue and Taxonomy Development) AWS-based transformation pipeline. Its purpose is to fetch archival data, apply a series of configurable transformations, and prepare it for ingest.
 
-# Why
-We want to ensure that all repositories in DA follow defined conventions and standards. See [The Engineering Handbook](https://national-archives.atlassian.net/wiki/spaces/DAAE/pages/47775767/Engineering+Handbook).
+## Core Features
 
-Specifically, this mandates that all repositories implement at least these minimal set of [pre-commit](https://pre-commit.com/) hooks and a pre-commit check.  Update these as you see fit - if you need to.
+- **Plugin-Based Architecture**: Transformations are implemented as individual "transformer" plugins that can be chained together in any order. See the [Transformer Architecture documentation](docs/TRANSFORMER_ARCHITECTURE.md) for details.
+- **Configurable Pipeline**: The entire transformation process is defined in a YAML configuration file, allowing for flexible and environment-specific setups.
+- **Local Development Environment**: A complete, high-fidelity local testing environment is provided using Docker and LocalStack, simulating the production AWS services.
+- **Business Logic Preservation**: Includes specialized transformers for complex, domain-specific rules like The National Archives' "Y-naming" conventions.
 
-It is therefore required that you use [pre-commit](https://pre-commit.com/) and the [detect secrets](https://github.com/Yelp/detect-secrets) tool/hook.
+## Local Development
 
-They can generally be installed with pip. e.g.
+To get started with local development, please see the **[Local Development Guide](LOCAL_DEVELOPMENT.md)**. This guide provides a complete walkthrough for setting up the Docker/LocalStack environment and running the pipeline on your machine.
 
-```
-pip install pre-commit
-pip install detect-secrets
-```
+## Key Documentation
 
-You will need to initialise pre-commit after cloning the newly created repository by running:
+- **[Local Development Guide](LOCAL_DEVELOPMENT.md)**: Your starting point for running the project locally.
+- **[Transformer Architecture](docs/TRANSFORMER_ARCHITECTURE.md)**: An in-depth explanation of the generic and specialized transformer plugins.
+- **[Transfer Register and Tarring](docs/TRANSFER_REGISTER_AND_TARRING.md)**: Details on the implementation of the transfer register (for preventing duplicate processing) and the final tarballing process.
+- **[Environment Variables](ENV_VARS.md)**: A reference for all environment variables used to configure the pipeline.
 
-```pre-commit install```
+## Pre-commit Hooks
 
-# Contents
-```README.md``` - Change this as appropriate.
+This repository uses [pre-commit](https://pre-commit.com/) to enforce code quality and standards. Please ensure you have it installed and initialized:
 
-```CHANGELOG.md``` - A [Keep a change log](https://keepachangelog.com/en/1.0.0/) changelog.
-
-```LICENSE``` - A MIT License dated 2023 Crown Copyright.
-
-```.pre-commit-config.yaml``` - Sensible defaults to get you started.  Add the hooks you need accordingly.
-
-```.secrets.baseline``` - A baseline file for detect-secrets that assumes there should be no secrets in this repository.
-
-```.github/workflows/pre_commit.yml``` - A workflow which runs pre-commit on a pull request to main, as a check.
-
-# Protect Main Branch
-Creating a repo from the template will not set branch protection.
-See [The Engineering Handbook](https://national-archives.atlassian.net/wiki/spaces/DAAE/pages/47775767/Engineering+Handbook) for guidance.
-
-## Testing Mode
-The pipeline supports a simple "testing mode" to run against test folders in S3 (or locally). Enable testing mode by setting environment variables before running the pipeline or deploying the Lambda.
-
-- **`TEST_MODE`**: set to `1`, `true`, `yes` (case-insensitive) to enable test behaviour.
-- **`S3_TEST_FOLDER`**: the prefix/folder in S3 to use for both input and output when testing (do not include a leading or trailing slash).
-
-Examples:
-
-PowerShell (local):
-```powershell
-$env:TEST_MODE = "1"
-$env:S3_TEST_FOLDER = "testing"
-python run_pipeline.py
-```
-
-Bash (local/CI):
 ```bash
-export TEST_MODE=1
-export S3_TEST_FOLDER=testing
-python run_pipeline.py
+pip install pre-commit
+pre-commit install
 ```
 
-Notes:
-- When `TEST_MODE` is enabled the pipeline will prefix the input `key` and output `S3_OUTPUT_DIR` with the value of `S3_TEST_FOLDER`, making it safe to run without clobbering production outputs.
-- This is intended for development and CI only; ensure you unset these variables or use a different profile when working with real production data.

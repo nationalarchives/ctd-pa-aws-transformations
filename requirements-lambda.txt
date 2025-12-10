@@ -1,9 +1,0 @@
-# Production Lambda dependencies only (Python 3.12)
-# boto3 is already included in AWS Lambda runtime, but we include it for local testing
-
-boto3>=1.34.0              # AWS SDK (included in Lambda, but needed for local testing)
-python-dotenv==1.2.1       # Environment variable management
-pyyaml==6.0.1              # YAML config parsing
-
-# Note: pandas and numpy removed - not needed for JSON/XML transformations
-# Note: pytest removed - dev dependency only

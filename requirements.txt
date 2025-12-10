@@ -1,20 +1,10 @@
-# Python dependencies for CTD PA Lambda Discovery
-# Pinned to versions installed in the `ctd_pa_lambda_discovery` venv
+# Production Lambda dependencies only (Python 3.12)
+# boto3 is already included in AWS Lambda runtime, but we include it for local testing
 
-# Core AWS and data processing
-boto3==1.40.67              # AWS SDK - S3, Lambda integration
-python-dotenv==1.2.1        # Environment variable management
-pyyaml==6.0.1              # YAML config file parsing
+boto3>=1.34.0              # AWS SDK (included in Lambda, but needed for local testing)
+python-dotenv==1.2.1       # Environment variable management
+pyyaml==6.0.1              # YAML config parsing
+xmltodict>=0.13.0          # XML to Dict conversion for the XMLConverterTransformer
 
-# Data processing
-pandas==2.3.3              # Data manipulation (if needed for transformations)
-numpy==2.3.4               # Numerical operations (pandas dependency)
-
-# Testing
-pytest==8.3.3              # Unit testing framework for transformer logic
-
-# Note: botocore is included with boto3
-# Standard library used: json, xml.etree.ElementTree, tarfile, io, pathlib, logging
-
-# Additional dependencies - uncomment and modify as needed:
-# requests>=2.31.0
+# Note: pandas and numpy removed - not needed for JSON/XML transformations
+# Note: pytest removed - dev dependency only
